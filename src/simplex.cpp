@@ -24,7 +24,7 @@ using namespace std;
 
 int total_steps = 0;
 
-Simplex::Simplex(int n, int m, double **A, double *b, double *c, double v) : n(n), m(m), v(v)
+Simplex::Simplex(int n, int m, double **A, double *b, double *c, double v) : n(n), m(m), A(nullptr), b(nullptr), c(nullptr), v(v), N(nullptr), B(nullptr)
 {
     this -> A = new double*[m];
     for (int i=0;i<m;i++)

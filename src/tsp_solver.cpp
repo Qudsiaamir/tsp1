@@ -4,9 +4,11 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 #include <unistd.h>
 #include <iostream>
 #include <vector>
@@ -24,19 +26,21 @@
 
 #define MAX_N 5001
 #define EPS 1e-5
+#define PATH_BUFFER 512
+#define COMMAND_BUFFER 1024
 
 typedef long long lld;
 typedef unsigned long long llu;
 typedef unsigned int uint;
 using namespace std;
 
-char path_adj[150], path_demo[150], file_graph[150], file_map[150];
-char path_graph[150], path_map[150], path_pdf[150];
+char path_adj[PATH_BUFFER], path_demo[PATH_BUFFER], file_graph[PATH_BUFFER], file_map[PATH_BUFFER];
+char path_graph[PATH_BUFFER], path_map[PATH_BUFFER], path_pdf[PATH_BUFFER];
 FILE *f_adj, *f_graph, *f_lp;
 
-char cmd[150];
-char cmd_map[150];
-char cmd_prev[150];
+char cmd[PATH_BUFFER];
+char cmd_map[COMMAND_BUFFER];
+char cmd_prev[COMMAND_BUFFER];
 
 int n;
 double adj[MAX_N][MAX_N];
@@ -55,6 +59,79 @@ inline void print_delimiter()
 {
     printf("---------------------------------------------------------------\n");
 }
+
+inline bool read_token(char *destination, size_t destination_size)
+{
+    if (destination_size == 0) return false;
+
+    char format[32];
+    snprintf(format, sizeof(format), "%%%zus", destination_size - 1);
+    return scanf(format, destination) == 1;
+}
+
+inline bool read_int(int &value)
+{
+    return scanf("%d", &value) == 1;
+}
+
+inline bool read_two_ints(int &x, int &y)
+{
+    return scanf("%d%d", &x, &y) == 2;
+}
+
+inline bool read_three_ints(int &x, int &y, int &z)
+{
+    return scanf("%d%d%d", &x, &y, &z) == 3;
+}
+
+inline bool join_path(char *destination, size_t destination_size, const char *directory, const char *filename)
+{
+    const char *separator = "";
+    size_t directory_length = strlen(directory);
+    if (directory_length > 0 && directory[directory_length - 1] != '/') separator = "/";
+
+    int written = snprintf(destination, destination_size, "%s%s%s", directory, separator, filename);
+    return written >= 0 && written < (int)destination_size;
+}
+
+inline bool compile_map()
+{
+    int written = snprintf(cmd_map, sizeof(cmd_map), "cd \"%s\" && pdflatex \"%s\" > /dev/null 2>&1", path_demo, file_map);
+    if (written < 0 || written >= (int)sizeof(cmd_map))
+    {
+        printf("Error: Map compilation command is too long.\n");
+        return false;
+    }
+
+    int result = system(cmd_map);
+    if (result != 0)
+    {
+        printf("Warning: Map compilation failed. Make sure pdflatex is installed and the demo files are valid.\n");
+        return false;
+    }
+
+    return true;
+}
+
+#ifdef __APPLE__
+inline void preview_pdf()
+{
+    int written = snprintf(cmd_prev, sizeof(cmd_prev), "killall qlmanage > /dev/null 2>&1; qlmanage -p \"%s\" > /dev/null 2>&1 &", path_pdf);
+    if (written < 0 || written >= (int)sizeof(cmd_prev))
+    {
+        printf("Warning: Preview command is too long.\n");
+        return;
+    }
+
+    printf("%s\n", cmd_prev);
+
+    int result = system(cmd_prev);
+    if (result != 0)
+    {
+        printf("Warning: Preview command failed.\n");
+    }
+}
+#endif
 
 inline int encode_edge(int i, int j)
 {
@@ -113,18 +190,12 @@ inline void write_full_edge(int x, int y)
     fprintf(f_graph, "\\draw[edge] (%d) to node[lab]{%d} (%d);\n", x, 1, y);
 }
 
-char *rep_ext(char *name, const char *ext)
+string rep_ext(const char *name, const char *ext)
 {
-    char *ret = new char[150];
-    strcpy(ret, name);
-    int ii = strlen(ret) - 1;
-    while (ii >= 0 && ret[ii] != '.') ii--;
-    assert(ii >= 0);
-    int l = strlen(ext);
-    for (int i=0;i<=l;i++) // takes care of '\0' at the end as well
-    {
-        ret[ii + i] = ext[i];
-    }
+    string ret(name);
+    string::size_type ii = ret.find_last_of('.');
+    assert(ii != string::npos);
+    ret.replace(ii, string::npos, ext);
     
     return ret;
 }
@@ -138,7 +209,11 @@ int main()
     print_delimiter();
     
     printf("Enter the path to the file containing the adjacency matrix:\n");
-    scanf("%s", path_adj);
+    if (!read_token(path_adj, sizeof(path_adj)))
+    {
+        printf("Error: Adjacency matrix path could not be read!\n");
+        return 1;
+    }
     
     if ((f_adj = fopen(path_adj, "r")) == NULL)
     {
@@ -147,7 +222,7 @@ int main()
     }
     
     printf("Processing adjacency matrix...\n");
-    if (fscanf(f_adj, "%d", &n) == 0)
+    if (fscanf(f_adj, "%d", &n) != 1)
     {
         printf("Error: Improper adjacency matrix format!\n");
         return 2;
@@ -159,7 +234,7 @@ int main()
     {
         for (int j=1;j<i;j++)
         {
-            if (fscanf(f_adj, "%lf", &adj[i][j]) == 0)
+            if (fscanf(f_adj, "%lf", &adj[i][j]) != 1)
             {
                 printf("Error: Improper adjacency matrix format!\n");
                 return 3;
@@ -223,25 +298,47 @@ int main()
     print_delimiter();
     
     printf("Enter the path to the folder containing the demo .tex files:\n");
-    scanf("%s", path_demo);
+    if (!read_token(path_demo, sizeof(path_demo)))
+    {
+        printf("Error: Demo folder path could not be read!\n");
+        return 4;
+    }
     print_delimiter();
     
     printf("Enter the name of the file containing the graph:\n");
-    scanf("%s", file_graph);
+    if (!read_token(file_graph, sizeof(file_graph)))
+    {
+        printf("Error: Graph file name could not be read!\n");
+        return 4;
+    }
     print_delimiter();
     
-    strcpy(path_graph, path_demo);
-    strcat(path_graph, file_graph);
+    if (!join_path(path_graph, sizeof(path_graph), path_demo, file_graph))
+    {
+        printf("Error: Graph file path is too long!\n");
+        return 4;
+    }
     
     printf("Enter the name of the file containing the map:\n");
-    scanf("%s", file_map);
+    if (!read_token(file_map, sizeof(file_map)))
+    {
+        printf("Error: Map file name could not be read!\n");
+        return 4;
+    }
     print_delimiter();
     
-    strcpy(path_map, path_demo);
-    strcat(path_map, file_map);
+    if (!join_path(path_map, sizeof(path_map), path_demo, file_map))
+    {
+        printf("Error: Map file path is too long!\n");
+        return 4;
+    }
     
-    strcpy(path_pdf, path_demo);
-    strcat(path_pdf, rep_ext(file_map, ".pdf"));
+    string pdf_file = rep_ext(file_map, ".pdf");
+    if (!join_path(path_pdf, sizeof(path_pdf), path_demo, pdf_file.c_str()))
+    {
+        printf("Error: PDF file path is too long!\n");
+        return 4;
+    }
     
     
     while (true)
@@ -254,7 +351,11 @@ int main()
         printf("- UNDO N : to remove the N previously generated constraint sets;\n");
         printf("- APPROX_MST : to run the MST-based 2-approximation algorithm;\n");
         printf("- EXIT : to stop the program.\n");
-        scanf("%s", cmd);
+        if (!read_token(cmd, sizeof(cmd)))
+        {
+            printf("Error: Command could not be read!\n");
+            return 5;
+        }
         
         if (strcmp(cmd, "SOLVE") == 0)
         {
@@ -336,18 +437,9 @@ int main()
             
                 printf("Results written to the graph file! Compiling the map...\n");
                 
-                sprintf(cmd_map, "(cd %s && exec pdflatex %s &> /dev/null)", path_demo, file_map);
-                
-                system(cmd_map);
-                
-                printf("Map compiled!\n");
+                if (compile_map()) printf("Map compiled!\n");
 #ifdef __APPLE__
-                // These shell instructions will work only on OS X
-                sprintf(cmd_prev, "killall qlmanage &> /dev/null; qlmanage -p %s &> /dev/null &", path_pdf);
-                
-                printf("%s\n", cmd_prev);
-                
-                system(cmd_prev);
+                preview_pdf();
 #endif
             }
             
@@ -357,10 +449,21 @@ int main()
         else if (strcmp(cmd, "REM_LOOP") == 0)
         {
             int num;
-            scanf("%d", &num);
+            if (!read_int(num))
+            {
+                printf("Error: Loop size could not be read!\n");
+                return 5;
+            }
             
             vector<int> vals(num);
-            for (int i=0;i<num;i++) scanf("%d", &vals[i]);
+            for (int i=0;i<num;i++)
+            {
+                if (!read_int(vals[i]))
+                {
+                    printf("Error: Loop node could not be read!\n");
+                    return 5;
+                }
+            }
             
             vector<double> constr(simp_n, 0.0);
             
@@ -396,7 +499,11 @@ int main()
         else if (strcmp(cmd, "REM_LOOP_RNG") == 0)
         {
             int lo, hi;
-            scanf("%d%d", &lo, &hi);
+            if (!read_two_ints(lo, hi))
+            {
+                printf("Error: Loop range could not be read!\n");
+                return 5;
+            }
             
             assert(hi >= lo);
             
@@ -439,7 +546,11 @@ int main()
         {
             // x(i, j) = v
             int x, y, v;
-            scanf("%d%d%d", &x, &y, &v);
+            if (!read_three_ints(x, y, v))
+            {
+                printf("Error: Edge setting could not be read!\n");
+                return 5;
+            }
             
             vector<double> constr1(simp_n, 0.0), constr2(simp_n, 0.0);
             
@@ -492,7 +603,11 @@ int main()
         else if (strcmp(cmd, "UNDO") == 0)
         {
             int steps;
-            scanf("%d", &steps);
+            if (!read_int(steps))
+            {
+                printf("Error: Undo step count could not be read!\n");
+                return 5;
+            }
             
             bool done = true;
             
@@ -539,18 +654,9 @@ int main()
             
             printf("Results written to the graph file! Compiling the map...\n");
             
-            sprintf(cmd_map, "(cd %s && exec pdflatex %s &> /dev/null)", path_demo, file_map);
-            
-            system(cmd_map);
-            
-            printf("Map compiled!\n");
+            if (compile_map()) printf("Map compiled!\n");
 #ifdef __APPLE__
-            // These shell instructions will work only on OS X
-            sprintf(cmd_prev, "killall qlmanage &> /dev/null; qlmanage -p %s &> /dev/null &", path_pdf);
-            
-            printf("%s\n", cmd_prev);
-            
-            system(cmd_prev);
+            preview_pdf();
 #endif
             print_delimiter();
         }

@@ -6,6 +6,7 @@
 #ifndef MST
 #define MST
 
+#include <utility>
 #include <vector>
 
 #define MAX_N 5001

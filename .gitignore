@@ -1,0 +1,19 @@
+# Build outputs
+build/
+tsp_solver
+
+# Solver/debug output
+lp.txt
+
+# LaTeX generated files
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+
+# OS/editor files
+.DS_Store
+*.swp
+*.swo
