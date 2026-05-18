@@ -62,13 +62,14 @@ inline vector<int> prim(int n, double adj[MAX_N][MAX_N])
 
 inline pair<int, vector<vector<int> > > build_tree(vector<int> p)
 {
-    int root;
+    int root = -1;
     vector<vector<int> > T(p.size(), vector<int>());
     for (uint i=1;i<p.size();i++)
     {
         if (p[i] == -1) root = i;
         else T[p[i]].push_back(i);
     }
+    assert(root != -1);
     return {root, T};
 }
 

@@ -43,6 +43,8 @@ private:
     
 public:
     Simplex(int n, int m, double **A, double *b, double *c, double v);
+    Simplex(const Simplex&) = delete;
+    Simplex& operator=(const Simplex&) = delete;
     
     ~Simplex();
     
